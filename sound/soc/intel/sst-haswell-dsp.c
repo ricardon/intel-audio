@@ -27,6 +27,7 @@
 #include <linux/pci.h>
 #include <linux/firmware.h>
 #include <linux/pm_runtime.h>
+#include <linux/debugfs.h>
 
 #include "sst-dsp.h"
 #include "sst-dsp-priv.h"
@@ -481,7 +482,17 @@ static int hsw_acpi_resource_map(struct sst_dsp *sst, struct sst_pdata *pdata)
 	sst->addr.shim = sst->addr.lpe + sst->addr.shim_offset;
 
 #ifdef CONFIG_DEBUG_FS
-	sst_debugfs_init("intel_adsp");
+	if (sst->debugfs_root)
+		dev_warn(sst->dev, "debugfs root already exists, reusing it\n");
+	else
+		sst->debugfs_root = debugfs_create_dir("intel_adsp", NULL);
+
+	if (!sst->debugfs_root) {
+		dev_warn(sst->dev, "could not create debugfs root\n");
+		return -ENOMEM;
+	}
+
+	sst_debugfs_init(sst->debugfs_root);
 	sst_debugfs_add_mmio_entry("mem", sst->addr.lpe, pdata->lpe_size,
 				   &sst->debugfs_bar0);
 	sst_debugfs_add_mmio_entry("cfg", sst->addr.pci_cfg, pdata->pcicfg_size,
@@ -690,7 +701,7 @@ static void hsw_free(struct sst_dsp *sst)
 {
 	sst_debugfs_remove_mmio_entry(sst->debugfs_bar0);
 	sst_debugfs_remove_mmio_entry(sst->debugfs_bar1);
-	sst_debugfs_exit();
+	debugfs_remove_recursive(sst->debugfs_root);
 	sst_mem_block_unregister_all(sst);
 	iounmap(sst->addr.lpe);
 	iounmap(sst->addr.pci_cfg);

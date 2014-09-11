@@ -145,18 +145,8 @@ void sst_debugfs_remove_mmio_entry(void *ctx)
 	kfree(dfse);
 }
 
-int sst_debugfs_init(const char *dirname)
+int sst_debugfs_init(struct dentry *root)
 {
-	if (rootdir) {
-		pr_err("%s: debugfs rootdir already initiated.\n", __func__);
-		return -EEXIST;
-	}
-	rootdir = debugfs_create_dir(dirname, NULL);
-
+	rootdir = root;
 	return 0;
-}
-
-void sst_debugfs_exit(void)
-{
-	debugfs_remove_recursive(rootdir);
 }
