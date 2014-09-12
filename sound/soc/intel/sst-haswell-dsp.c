@@ -493,10 +493,10 @@ static int hsw_acpi_resource_map(struct sst_dsp *sst, struct sst_pdata *pdata)
 	}
 
 	sst_debugfs_init(sst->debugfs_root);
-	sst_debugfs_add_mmio_entry("mem", sst->addr.lpe, pdata->lpe_size,
-				   &sst->debugfs_bar0);
-	sst_debugfs_add_mmio_entry("cfg", sst->addr.pci_cfg, pdata->pcicfg_size,
-				   &sst->debugfs_bar1);
+	if (!sst_debugfs_add_mmio_entry(sst, pdata, "mem"))
+		dev_warn(sst->dev, "debugfs file mem not created\n");
+	if (!sst_debugfs_add_mmio_entry(sst, pdata, "cfg"))
+		dev_warn(sst->dev, "debugfs file cfg not created\n");
 #endif
 
 	return 0;
@@ -699,8 +699,8 @@ static int hsw_init(struct sst_dsp *sst, struct sst_pdata *pdata)
 
 static void hsw_free(struct sst_dsp *sst)
 {
-	sst_debugfs_remove_mmio_entry(sst->debugfs_bar0);
-	sst_debugfs_remove_mmio_entry(sst->debugfs_bar1);
+	sst_debugfs_remove_mmio_entry(sst, "mem");
+	sst_debugfs_remove_mmio_entry(sst, "cfg");
 	debugfs_remove_recursive(sst->debugfs_root);
 	sst_mem_block_unregister_all(sst);
 	iounmap(sst->addr.lpe);

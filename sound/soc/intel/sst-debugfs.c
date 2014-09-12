@@ -17,6 +17,9 @@
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
 
+#include "sst-dsp.h"
+#include "sst-dsp-priv.h"
+
 static struct dentry *rootdir;
 
 struct sst_dfsentry {
@@ -113,10 +116,13 @@ static const struct file_operations sst_dfs_fops = {
 	.write = sst_dfsentry_write,
 };
 
-int sst_debugfs_add_mmio_entry(const char *filename, void *buf,
-			       size_t size, void **ctx)
+int sst_debugfs_add_mmio_entry(struct sst_dsp *sst, struct sst_pdata *pdata,
+			       const char *filename)
 {
 	struct sst_dfsentry *dfse;
+
+	if (!sst || !pdata || !filename)
+		return -EINVAL;
 
 	dfse = kzalloc(sizeof(*dfse), GFP_KERNEL);
 	if (!dfse) {
@@ -124,22 +130,41 @@ int sst_debugfs_add_mmio_entry(const char *filename, void *buf,
 		return -ENOMEM;
 	}
 
-	dfse->buf = buf;
-	dfse->size = size;
-	dfse->dfsentry = debugfs_create_file(
-				filename, 0644, rootdir, dfse, &sst_dfs_fops);
+	if (!strcmp(filename, "mem")) {
+		dfse->buf = sst->addr.lpe;
+		dfse->size = pdata->lpe_size;
+		sst->debugfs_bar0 = dfse;
+	} else if (!strcmp(filename, "cfg")) {
+		dfse->buf = sst->addr.pci_cfg;
+		dfse->size = pdata->pcicfg_size;
+		sst->debugfs_bar1 = dfse;
+	} else {
+		pr_err("%s: invalid filename\n", __func__);
+		kfree(dfse);
+		return -EINVAL;
+	}
+
+	dfse->dfsentry = debugfs_create_file(filename, 0644, rootdir,
+						     dfse, &sst_dfs_fops);
 	if (!dfse->dfsentry) {
 		pr_err("%s: cannot create debugfs entry.\n", __func__);
+		kfree(dfse);
 		return -ENODEV;
 	}
-	*ctx = dfse;
 
 	return 0;
 }
 
-void sst_debugfs_remove_mmio_entry(void *ctx)
+void sst_debugfs_remove_mmio_entry(struct sst_dsp *sst, const char *filename)
 {
-	struct sst_dfsentry *dfse = (struct sst_dfsentry *)ctx;
+	struct sst_dfsentry *dfse;
+
+	if (!strcmp(filename, "mem"))
+		dfse = sst->debugfs_bar0;
+	else if (!strcmp(filename, "cfg"))
+		dfse = sst->debugfs_bar1;
+	else
+		return;
 
 	debugfs_remove(dfse->dfsentry);
 	kfree(dfse);

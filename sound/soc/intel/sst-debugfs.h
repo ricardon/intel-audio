@@ -16,9 +16,9 @@
 #ifndef __SOUND_SOC_SST_DEBUGFS_H
 #define __SOUND_SOC_SST_DEBUGFS_H
 
-int sst_debugfs_add_mmio_entry(const char *filename,
-			       void *buf, size_t size, void **ctx);
-void sst_debugfs_remove_mmio_entry(void *ctx);
+int sst_debugfs_add_mmio_entry(struct sst_dsp *sst, struct sst_pdata *pdata,
+			       const char *filename);
+void sst_debugfs_remove_mmio_entry(struct sst_dsp *sst, const char *filename);
 int sst_debugfs_init(struct dentry *root);
 
 #endif
