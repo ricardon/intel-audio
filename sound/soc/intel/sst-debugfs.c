@@ -24,6 +24,7 @@ struct sst_dfsentry {
 	struct dentry *dfsentry;
 	size_t size;
 	void *buf;
+	struct sst_dsp *sst;
 };
 
 static int sst_dfsentry_open(struct inode *inode, struct file *file)
@@ -149,6 +150,8 @@ int sst_debugfs_add_mmio_entry(struct sst_dsp *sst, struct sst_pdata *pdata,
 		kfree(dfse);
 		return -ENODEV;
 	}
+
+	dfse->sst = sst;
 
 	return 0;
 }
