@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
+#include <linux/device.h>
 
 #include "sst-dsp.h"
 #include "sst-dsp-priv.h"
@@ -41,7 +42,7 @@ static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
 	int i, size;
 	u32 *buf;
 
-	pr_debug("%s: pbuf: %p, *ppos: 0x%llx", __func__, buffer, *ppos);
+	dev_dbg(dfse->sst->dev, "pbuf: %p, *ppos: 0x%llx\n", buffer, *ppos);
 
 	size = dfse->size;
 
@@ -53,7 +54,7 @@ static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
 	size = (count + 3) & (~3);
 	buf = kzalloc(size, GFP_KERNEL);
 	if (!buf) {
-		pr_err(" %s: kzalloc failed, aborting\n", __func__);
+		dev_err(dfse->sst->dev, "kzalloc failed, aborting\n");
 		return -ENOMEM;
 	}
 
@@ -66,7 +67,7 @@ static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
 
 	*ppos += count;
 
-	pr_debug("%s: *ppos: 0x%llx, count: %zu", __func__, *ppos, count);
+	dev_dbg(dfse->sst->dev, "*ppos: 0x%llx, count: %zu\n", *ppos, count);
 
 	return count;
 }
@@ -78,7 +79,7 @@ static ssize_t sst_dfsentry_write(struct file *file, const char __user *buffer,
 	int i, size;
 	u32 *buf;
 
-	pr_debug("%s: pbuf: %p, *ppos: 0x%llx", __func__, buffer, *ppos);
+	dev_dbg(dfse->sst->dev, "pbuf: %p, *ppos: 0x%llx\n", buffer, *ppos);
 
 	size = dfse->size;
 
@@ -90,7 +91,7 @@ static ssize_t sst_dfsentry_write(struct file *file, const char __user *buffer,
 	size = (count + 3) & (~3);
 	buf = kzalloc(size, GFP_KERNEL);
 	if (!buf) {
-		pr_err(" %s: kzalloc failed, aborting\n", __func__);
+		dev_err(dfse->sst->dev, "kzalloc failed, aborting\n");
 		return -ENOMEM;
 	}
 
@@ -103,7 +104,7 @@ static ssize_t sst_dfsentry_write(struct file *file, const char __user *buffer,
 	kfree(buf);
 	*ppos += count;
 
-	pr_debug("%s: *ppos: 0x%llx, count: %zu", __func__, *ppos, count);
+	dev_dbg(dfse->sst->dev, "*ppos: 0x%llx, count: %zu\n", *ppos, count);
 
 	return count;
 }
@@ -125,7 +126,7 @@ int sst_debugfs_add_mmio_entry(struct sst_dsp *sst, struct sst_pdata *pdata,
 
 	dfse = kzalloc(sizeof(*dfse), GFP_KERNEL);
 	if (!dfse) {
-		pr_err("%s: cannot create debugfs entry.\n", __func__);
+		dev_err(sst->dev, "cannot create debugfs entry.\n");
 		return -ENOMEM;
 	}
 
@@ -138,7 +139,7 @@ int sst_debugfs_add_mmio_entry(struct sst_dsp *sst, struct sst_pdata *pdata,
 		dfse->size = pdata->pcicfg_size;
 		sst->debugfs_bar1 = dfse;
 	} else {
-		pr_err("%s: invalid filename\n", __func__);
+		dev_err(sst->dev, "invalid filename\n");
 		kfree(dfse);
 		return -EINVAL;
 	}
@@ -146,7 +147,7 @@ int sst_debugfs_add_mmio_entry(struct sst_dsp *sst, struct sst_pdata *pdata,
 	dfse->dfsentry = debugfs_create_file(filename, 0644, sst->debugfs_root,
 					     dfse, &sst_dfs_fops);
 	if (!dfse->dfsentry) {
-		pr_err("%s: cannot create debugfs entry.\n", __func__);
+		dev_err(sst->dev, "cannot create debugfs entry.\n");
 		kfree(dfse);
 		return -ENODEV;
 	}
