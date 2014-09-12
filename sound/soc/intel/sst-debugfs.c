@@ -53,10 +53,9 @@ static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
 
 	size = (count + 3) & (~3);
 	buf = kzalloc(size, GFP_KERNEL);
-	if (!buf) {
-		dev_err(dfse->sst->dev, "kzalloc failed, aborting\n");
+
+	if (!buf)
 		return -ENOMEM;
-	}
 
 	for (i = 0; i < size / sizeof(*buf); i++)
 		buf[i] = *(u32 *)(dfse->buf + *ppos + i * sizeof(*buf));
@@ -90,10 +89,9 @@ static ssize_t sst_dfsentry_write(struct file *file, const char __user *buffer,
 
 	size = (count + 3) & (~3);
 	buf = kzalloc(size, GFP_KERNEL);
-	if (!buf) {
-		dev_err(dfse->sst->dev, "kzalloc failed, aborting\n");
+
+	if (!buf)
 		return -ENOMEM;
-	}
 
 	if (copy_from_user(buf, buffer, count))
 		return 0;
@@ -125,10 +123,9 @@ int sst_debugfs_add_mmio_entry(struct sst_dsp *sst, struct sst_pdata *pdata,
 		return -EINVAL;
 
 	dfse = kzalloc(sizeof(*dfse), GFP_KERNEL);
-	if (!dfse) {
-		dev_err(sst->dev, "cannot create debugfs entry.\n");
+
+	if (!dfse)
 		return -ENOMEM;
-	}
 
 	if (!strcmp(filename, "mem")) {
 		dfse->buf = sst->addr.lpe;
