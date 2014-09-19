@@ -72,6 +72,7 @@ config SND_SOC_INTEL_BROADWELL_MACH
 	select SND_SOC_INTEL_HASWELL
 	select SND_COMPRESS_OFFLOAD
 	select SND_SOC_RT286
+	select SND_SOC_RT5640
 	help
 	  This adds support for the Wilcatpoint Audio DSP on Intel(R) Broadwell
 	  Ultrabook platforms.

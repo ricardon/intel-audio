@@ -228,7 +228,7 @@ static struct sst_acpi_desc sst_acpi_haswell_desc = {
 };
 
 static struct sst_acpi_mach broadwell_machines[] = {
-	{ "INT343A", "broadwell-audio", "intel/IntcSST2.bin" },
+	{ "INT33CA", "broadwell-audio", "intel/IntcSST2.bin" },
 	{}
 };
 
