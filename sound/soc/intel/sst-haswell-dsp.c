@@ -480,11 +480,13 @@ static int hsw_acpi_resource_map(struct sst_dsp *sst, struct sst_pdata *pdata)
 	/* SST Shim */
 	sst->addr.shim = sst->addr.lpe + sst->addr.shim_offset;
 
+#ifdef CONFIG_DEBUG_FS
 	sst_debugfs_init("intel_adsp");
 	sst_debugfs_add_mmio_entry("mem", sst->addr.lpe, pdata->lpe_size,
 				   &sst->debugfs_bar0);
 	sst_debugfs_add_mmio_entry("cfg", sst->addr.pci_cfg, pdata->pcicfg_size,
 				   &sst->debugfs_bar1);
+#endif
 
 	return 0;
 }

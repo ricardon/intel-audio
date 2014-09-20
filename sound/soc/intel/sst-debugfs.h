@@ -16,17 +16,10 @@
 #ifndef __SOUND_SOC_SST_DEBUGFS_H
 #define __SOUND_SOC_SST_DEBUGFS_H
 
-#ifdef DEBUG
 int sst_debugfs_add_mmio_entry(const char *filename,
 			       void *buf, size_t size, void **ctx);
 void sst_debugfs_remove_mmio_entry(void *ctx);
 int sst_debugfs_init(const char *dirname);
 void sst_debugfs_exit(void);
-#else
-#define sst_debugfs_add_mmio_entry(a, b, c, d)
-#define sst_debugfs_remove_mmio_entry(a)
-#define sst_debugfs_init(a)
-#define sst_debugfs_exit()
-#endif
 
 #endif
