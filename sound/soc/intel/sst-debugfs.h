@@ -19,6 +19,5 @@
 int sst_debugfs_add_mmio_entry(struct sst_dsp *sst, struct sst_pdata *pdata,
 			       const char *filename);
 void sst_debugfs_remove_mmio_entry(struct sst_dsp *sst, const char *filename);
-int sst_debugfs_init(struct dentry *root);
 
 #endif

@@ -20,8 +20,6 @@
 #include "sst-dsp.h"
 #include "sst-dsp-priv.h"
 
-static struct dentry *rootdir;
-
 struct sst_dfsentry {
 	struct dentry *dfsentry;
 	size_t size;
@@ -144,8 +142,8 @@ int sst_debugfs_add_mmio_entry(struct sst_dsp *sst, struct sst_pdata *pdata,
 		return -EINVAL;
 	}
 
-	dfse->dfsentry = debugfs_create_file(filename, 0644, rootdir,
-						     dfse, &sst_dfs_fops);
+	dfse->dfsentry = debugfs_create_file(filename, 0644, sst->debugfs_root,
+					     dfse, &sst_dfs_fops);
 	if (!dfse->dfsentry) {
 		pr_err("%s: cannot create debugfs entry.\n", __func__);
 		kfree(dfse);
@@ -168,10 +166,4 @@ void sst_debugfs_remove_mmio_entry(struct sst_dsp *sst, const char *filename)
 
 	debugfs_remove(dfse->dfsentry);
 	kfree(dfse);
-}
-
-int sst_debugfs_init(struct dentry *root)
-{
-	rootdir = root;
-	return 0;
 }

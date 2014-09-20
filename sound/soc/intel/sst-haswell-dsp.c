@@ -492,7 +492,6 @@ static int hsw_acpi_resource_map(struct sst_dsp *sst, struct sst_pdata *pdata)
 		return -ENOMEM;
 	}
 
-	sst_debugfs_init(sst->debugfs_root);
 	if (!sst_debugfs_add_mmio_entry(sst, pdata, "mem"))
 		dev_warn(sst->dev, "debugfs file mem not created\n");
 	if (!sst_debugfs_add_mmio_entry(sst, pdata, "cfg"))
