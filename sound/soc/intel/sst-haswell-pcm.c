@@ -32,7 +32,6 @@
 #include "sst-haswell-ipc.h"
 #include "sst-dsp-priv.h"
 #include "sst-dsp.h"
-#include "sst-debugfs.h"
 
 #define HSW_PCM_COUNT		6
 #define HSW_VOLUME_MAX		0x7FFFFFFF	/* 0dB */
@@ -550,14 +549,14 @@ static int hsw_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	struct sst_hsw *hsw = pdata->hsw;
 
 	switch (cmd) {
-	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_START:
+	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 		sst_hsw_stream_resume(hsw, pcm_data->stream, 0);
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
-	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
+	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 		sst_hsw_stream_pause(hsw, pcm_data->stream, 0);
 		break;
 	default:
@@ -856,8 +855,8 @@ static const struct snd_soc_dapm_route graph[] = {
 
 static int hsw_pcm_probe(struct snd_soc_platform *platform)
 {
+	struct hsw_priv_data *priv_data = snd_soc_platform_get_drvdata(platform);
 	struct sst_pdata *pdata = dev_get_platdata(platform->dev);
-	struct hsw_priv_data *priv_data;
 	struct device *dma_dev, *dev;
 	int i, ret = 0;
 
@@ -872,7 +871,6 @@ static int hsw_pcm_probe(struct snd_soc_platform *platform)
 	priv_data->dev = platform->dev;
 	priv_data->pm_state = HSW_PM_STATE_D0;
 	priv_data->soc_card = platform->component.card;
-	snd_soc_platform_set_drvdata(platform, priv_data);
 
 	/* allocate DSP buffer page tables */
 	for (i = 0; i < ARRAY_SIZE(hsw_dais); i++) {
@@ -959,7 +957,6 @@ static int hsw_pcm_dev_probe(struct platform_device *pdev)
 {
 	struct sst_pdata *sst_pdata = dev_get_platdata(&pdev->dev);
 	struct hsw_priv_data *priv_data;
-	struct dentry root;
 	int ret;
 
 	if (!sst_pdata)
@@ -984,12 +981,6 @@ static int hsw_pcm_dev_probe(struct platform_device *pdev)
 		hsw_dais, ARRAY_SIZE(hsw_dais));
 	if (ret < 0)
 		goto err_comp;
-
-#ifdef CONFIG_DEBUG_FS
-	priv_data->hsw = sst_pdata->dsp;
-	sst_debugfs_get_root(&root);
-	sst_hsw_dbg_enable(priv_data->hsw, &root);
-#endif
 
 	return 0;
 

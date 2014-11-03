@@ -160,11 +160,3 @@ void sst_debugfs_exit(void)
 {
 	debugfs_remove_recursive(rootdir);
 }
-
-void sst_debugfs_get_root(struct dentry *root)
-{
-	if (root) {
-		*root = *rootdir;
-	}
-}
-
