@@ -2115,11 +2115,70 @@ static const struct file_operations fw_log_fops = {
 	.release = fw_log_release,
 };
 
+static int fw_log_config_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+	return 0;
+}
+
+static ssize_t fw_log_config_read(struct file *file, char __user *buffer,
+				  size_t count, loff_t *ppos)
+{
+	struct sst_hsw_log_stream *log_stream = file->private_data;
+	int max_size = sizeof(log_stream->config);
+
+	return simple_read_from_buffer(buffer, count, ppos, log_stream->config,
+				       max_size);
+}
+
+static ssize_t fw_log_config_write(struct file *file, const char __user *buffer,
+				   size_t count, loff_t *ppos)
+{
+	struct sst_hsw_log_stream *log_stream = file->private_data;
+	struct sst_hsw_ipc_debug_log_enable_req req;
+	u32 header;
+	int max_size = sizeof(log_stream->config);
+	int ret;
+
+	count = simple_write_to_buffer(log_stream->config, max_size, ppos,
+				       buffer, count);
+	if (count == -EFAULT)
+		return -EFAULT;
+
+	req.ringinfo.ring_pt_address = virt_to_phys(log_stream->ring_descr);
+	req.ringinfo.num_pages = log_stream->pages;
+	req.ringinfo.ring_size = log_stream->size;
+	req.ringinfo.ring_offset = 0;
+	req.ringinfo.ring_first_pfn = virt_to_phys(log_stream->dma_area);
+	memcpy(req.config, log_stream->config, sizeof(log_stream->config));
+
+	header = IPC_GLB_TYPE(IPC_GLB_DEBUG_LOG_MESSAGE);
+	header |= IPC_LOG_OP_TYPE(IPC_DEBUG_ENABLE_LOG);
+	header |= IPC_LOG_ID(SST_HSW_GLOBAL_LOG);
+
+	dev_info(log_stream->hsw->dev, "send ipc to configure fw log\n");
+
+	ret = ipc_tx_message_nowait(log_stream->hsw, header, &req, sizeof(req));
+	if (ret < 0) {
+		dev_err(log_stream->hsw->dev,
+			"ipc: setting config fw log failed\n");
+		return ret;
+	}
+
+	return count;
+}
+
+static const struct file_operations fw_log_config_fops = {
+	.open = fw_log_config_open,
+	.read = fw_log_config_read,
+	.write = fw_log_config_write,
+};
+
 int sst_hsw_fw_log_enable(struct sst_hsw *hsw)
 {
 	struct sst_hsw_log_stream *stream = &hsw->log_stream;
 	int i, ret;
-	struct dentry *fwdir = NULL, *fw_log = NULL;
+	struct dentry *fwdir = NULL, *fw_log = NULL, *fw_log_config = NULL;
 
 	if (WARN_ON(!hsw))
 		return -ENXIO;
@@ -2197,6 +2256,15 @@ int sst_hsw_fw_log_enable(struct sst_hsw *hsw)
 	if (!fw_log) {
 		dev_warn(stream->hsw->dev,
 			 "failed to create log debugfs file\n");
+		ret = -ENOMEM;
+		goto err_file;
+	}
+
+	fw_log_config = debugfs_create_file("log_config", 0644, fwdir,
+					    stream, &fw_log_config_fops);
+	if (!fw_log_config) {
+		dev_warn(stream->hsw->dev,
+			 "ASoC: Failed to create log_config debugfs file\n");
 		ret = -ENOMEM;
 		goto err_file;
 	}
