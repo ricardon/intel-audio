@@ -903,6 +903,9 @@ static int hsw_pcm_probe(struct snd_soc_platform *platform)
 	pm_runtime_enable(platform->dev);
 	pm_runtime_idle(platform->dev);
 
+#ifdef CONFIG_DEBUG_FS
+	sst_hsw_fw_log_enable(priv_data->hsw);
+#endif
 	return 0;
 
 err:

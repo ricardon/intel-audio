@@ -488,6 +488,15 @@ int sst_hsw_dsp_init(struct device *dev, struct sst_pdata *pdata);
 void sst_hsw_dsp_free(struct device *dev, struct sst_pdata *pdata);
 struct sst_dsp *sst_hsw_get_dsp(struct sst_hsw *hsw);
 
+#ifdef CONFIG_PM_RUNTIME
+int sst_hsw_fw_log_enable(struct sst_hsw *hsw);
+#else
+static inline int sst_hsw_fw_log_enable(struct sst_hsw *hsw)
+{
+	return -ENODEV;
+}
+#endif
+
 /* runtime module management */
 struct sst_module_runtime *sst_hsw_runtime_module_create(struct sst_hsw *hsw,
 	int mod_id, int offset);

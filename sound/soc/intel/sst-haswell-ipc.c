@@ -1946,6 +1946,281 @@ int sst_hsw_dsp_runtime_resume(struct sst_hsw *hsw)
 
 	return ret;
 }
+
+static void hsw_log_notification_work(struct work_struct *work)
+{
+	struct sst_hsw_log_stream *stream;
+	struct sst_hsw *hsw;
+	u32 header;
+	int ret;
+
+	stream = container_of(work, struct sst_hsw_log_stream, notify_work);
+	hsw = stream->hsw;
+
+	header = IPC_GLB_TYPE(IPC_GLB_DEBUG_LOG_MESSAGE);
+	header |= IPC_LOG_OP_TYPE(IPC_DEBUG_NOTIFY_LOG_DUMP);
+	header |= IPC_LOG_ID(SST_HSW_GLOBAL_LOG);
+	ret = ipc_tx_message_nowait(hsw, header, &stream->curr_pos,
+				    sizeof(stream->curr_pos));
+	if (ret < 0)
+		dev_err(hsw->dev, "ipc: notify fw log position failed\n");
+
+	wake_up_interruptible(&stream->readers_wait_q);
+}
+
+static int fw_log_open(struct inode *inode, struct file *file)
+{
+	struct sst_hsw_log_stream *log_stream = inode->i_private;
+	struct sst_hsw_ipc_debug_log_enable_req req;
+	u32 header;
+	int ret;
+
+	pm_runtime_get(log_stream->hsw->dev);
+	file->private_data = inode->i_private;
+
+	req.ringinfo.ring_pt_address = virt_to_phys(log_stream->ring_descr);
+	req.ringinfo.num_pages = log_stream->pages;
+	req.ringinfo.ring_size = log_stream->size;
+	req.ringinfo.ring_offset = 0;
+	req.ringinfo.ring_first_pfn = virt_to_phys(log_stream->dma_area);
+	memcpy(req.config, log_stream->config, sizeof(log_stream->config));
+
+	header = IPC_GLB_TYPE(IPC_GLB_DEBUG_LOG_MESSAGE);
+	header |= IPC_LOG_OP_TYPE(IPC_DEBUG_ENABLE_LOG);
+	header |= IPC_LOG_ID(SST_HSW_GLOBAL_LOG);
+
+	ret = ipc_tx_message_wait(log_stream->hsw, header, &req, sizeof(req),
+				  NULL, 0);
+	if (ret < 0) {
+		dev_err(log_stream->hsw->dev, "ipc: open fw log failed\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int fw_log_release(struct inode *inode, struct file *file)
+{
+	struct sst_hsw_log_stream *log_stream = inode->i_private;
+	u32 header;
+	int ret;
+
+	header = IPC_GLB_TYPE(IPC_GLB_DEBUG_LOG_MESSAGE);
+	header |= IPC_LOG_OP_TYPE(IPC_DEBUG_DISABLE_LOG);
+	header |= IPC_LOG_ID(SST_HSW_GLOBAL_LOG);
+
+	ret = ipc_tx_message_nowait(log_stream->hsw, header, NULL, 0);
+	if (ret < 0) {
+		dev_err(log_stream->hsw->dev,
+			"ipc: disable fw log failed, returned %d\n", ret);
+		return ret;
+	}
+
+	pm_runtime_put(log_stream->hsw->dev);
+	return 0;
+}
+
+static ssize_t fw_log_copy_to_user(struct sst_hsw_log_stream *log_stream,
+				   char __user *user_buf, size_t count)
+{
+	/* check for reader buffer wrap */
+	if (log_stream->reader_pos + count > log_stream->size) {
+		size_t size = log_stream->size - log_stream->reader_pos;
+
+		/* wrap */
+		if (copy_to_user(user_buf,
+				 log_stream->dma_area + log_stream->reader_pos,
+				 size))
+			return -EFAULT;
+
+		if (copy_to_user(user_buf + size, log_stream->dma_area,
+				 count - size))
+			return -EFAULT;
+
+		log_stream->reader_pos = count - size;
+
+		return count;
+
+	} else {
+		/* no wrap */
+		if (copy_to_user(user_buf,
+				 log_stream->dma_area + log_stream->reader_pos,
+				 count))
+			return -EFAULT;
+
+		log_stream->reader_pos += count;
+
+		return count;
+	}
+}
+
+static ssize_t fw_log_read(struct file *file, char __user *user_buf,
+			   size_t count, loff_t *ppos)
+{
+	struct sst_hsw_log_stream *log_stream = file->private_data;
+	size_t bytes;
+	ssize_t ret = 0;
+
+	do {
+		mutex_lock(&log_stream->rw_mutex);
+
+		if (log_stream->last_pos < log_stream->curr_pos) {
+			if (log_stream->reader_pos < log_stream->last_pos ||
+			    log_stream->reader_pos > log_stream->curr_pos)
+
+				log_stream->reader_pos = log_stream->last_pos;
+		} else {
+			if (log_stream->reader_pos < log_stream->last_pos &&
+			    log_stream->reader_pos > log_stream->curr_pos)
+
+				log_stream->reader_pos = log_stream->last_pos;
+		}
+
+		if (log_stream->curr_pos >= log_stream->reader_pos) {
+			bytes = log_stream->curr_pos - log_stream->reader_pos;
+		} else {
+			bytes = log_stream->curr_pos + log_stream->size -
+				log_stream->reader_pos;
+		}
+		mutex_unlock(&log_stream->rw_mutex);
+
+		if (bytes > count)
+			bytes = count;
+
+		if (bytes > 0) {
+			ret = fw_log_copy_to_user(log_stream, user_buf, bytes);
+			break;
+		}
+
+		if (file->f_flags & O_NONBLOCK) {
+			ret = -EAGAIN;
+			break;
+		}
+
+		if (wait_event_interruptible(log_stream->readers_wait_q,
+					     log_stream->curr_pos !=
+					     log_stream->reader_pos)) {
+			ret = -ERESTARTSYS;
+			break;
+		}
+
+	} while (1);
+
+	return ret;
+}
+
+static const struct file_operations fw_log_fops = {
+	.open = fw_log_open,
+	.read = fw_log_read,
+	.release = fw_log_release,
+};
+
+int sst_hsw_fw_log_enable(struct sst_hsw *hsw)
+{
+	struct sst_hsw_log_stream *stream = &hsw->log_stream;
+	int i, ret;
+	struct dentry *fwdir = NULL, *fw_log = NULL;
+
+	if (WARN_ON(!hsw))
+		return -ENXIO;
+
+	stream->dma_buf[0] = devm_kzalloc(hsw->dsp->dev,
+					  sizeof(*stream->dma_buf[0]),
+					  GFP_KERNEL);
+	if (stream->dma_buf[0] == NULL)
+		return -ENOMEM;
+	stream->dma_buf[1] = devm_kzalloc(hsw->dsp->dev,
+					  sizeof(*stream->dma_buf[1]),
+					  GFP_KERNEL);
+	if (stream->dma_buf[1] == NULL)
+		return -ENOMEM;
+
+	memset(stream->config, 0xFF, sizeof(stream->config));
+	stream->size = 32 * PAGE_SIZE;
+	stream->hsw = hsw;
+
+	if (snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, hsw->dsp->dma_dev,
+				stream->size, stream->dma_buf[0]) < 0)
+		return -ENOMEM;
+
+	stream->dma_addr = stream->dma_buf[0]->addr;
+	stream->dma_area = stream->dma_buf[0]->area;
+
+	dev_info(stream->hsw->dev,
+		 "fwlog buffer: area[%p], addr[%p], size[%d]\n",
+		 (void *)stream->dma_area, (void *)stream->dma_addr,
+		 stream->size);
+
+	if (snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, hsw->dsp->dma_dev,
+				PAGE_SIZE, stream->dma_buf[1]) < 0) {
+		ret = -ENOMEM;
+		goto err_ring_descr;
+	}
+
+	stream->ring_descr = stream->dma_buf[1]->area;
+
+	if (stream->size % PAGE_SIZE)
+		stream->pages = (stream->size / PAGE_SIZE) + 1;
+	else
+		stream->pages = stream->size / PAGE_SIZE;
+
+	dev_info(stream->hsw->dev,
+		 "page table for fwlog buffer[%p] size[0x%x] pages[%d]\n",
+		 stream->dma_area, stream->size, stream->pages);
+
+	for (i = 0; i < stream->pages; i++) {
+		u32 idx = (((i << 2) + i)) >> 1;
+		u32 pfn = (virt_to_phys(stream->dma_area + i * PAGE_SIZE))
+				>> PAGE_SHIFT;
+		u32 *pg_table;
+
+		pg_table = (u32 *)(stream->ring_descr + idx);
+
+		if (i & 1)
+			*pg_table |= (pfn << 4);
+		else
+			*pg_table |= pfn;
+	}
+
+	INIT_WORK(&stream->notify_work, hsw_log_notification_work);
+	init_waitqueue_head(&stream->readers_wait_q);
+	mutex_init(&stream->rw_mutex);
+
+	fwdir = debugfs_create_dir("fw", hsw->dsp->debugfs_root);
+
+	if (!fwdir) {
+		ret = -ENOMEM;
+		goto err_fwdir;
+	}
+
+	fw_log = debugfs_create_file("log", 0444, fwdir, stream, &fw_log_fops);
+	if (!fw_log) {
+		dev_warn(stream->hsw->dev,
+			 "failed to create log debugfs file\n");
+		ret = -ENOMEM;
+		goto err_file;
+	}
+
+	return 0;
+
+err_file:
+	debugfs_remove_recursive(fwdir);
+err_fwdir:
+	snd_dma_free_pages(stream->dma_buf[1]);
+err_ring_descr:
+	snd_dma_free_pages(stream->dma_buf[0]);
+	return ret;
+}
+EXPORT_SYMBOL(sst_hsw_fw_log_enable);
+
+void sst_hsw_fw_log_disable(struct sst_hsw *hsw)
+{
+	struct sst_hsw_log_stream *stream = &hsw->log_stream;
+	flush_work(&hsw->log_stream.notify_work);
+	snd_dma_free_pages(stream->dma_buf[1]);
+	snd_dma_free_pages(stream->dma_buf[1]);
+}
+
 #endif
 
 static int msg_empty_list_init(struct sst_hsw *hsw)
