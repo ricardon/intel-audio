@@ -178,6 +178,13 @@ enum ipc_debug_operation {
 	IPC_DEBUG_MAX_DEBUG_LOG
 };
 
+enum dx_state {
+	d0_state = 0,
+	idle_state = 1,
+	d3_state = 3,
+	unknown_state,
+};
+
 /* Firmware Ready */
 struct sst_hsw_ipc_fw_ready {
 	u32 inbox_offset;
@@ -297,6 +304,12 @@ struct sst_hsw {
 	struct sst_hsw_ipc_dx_reply dx;
 	void *dx_context;
 	dma_addr_t dx_context_paddr;
+	int dx_state;
+	int cnt_state_idle;
+	int cnt_state_d0;
+	int cnt_state_d3;
+	int cnt_state_s0;
+	int cnt_state_s3;
 
 	/* boot */
 	wait_queue_head_t boot_wait;
@@ -2174,11 +2187,64 @@ static const struct file_operations fw_log_config_fops = {
 	.write = fw_log_config_write,
 };
 
+#ifdef CONFIG_PM
+static int suspend_stats_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+	return 0;
+}
+
+static const char * const state_names[] = {"D0", "IDLE", "D3", "UNKNOWN"};
+static const char *get_dstate_name(int state)
+{
+	switch (state) {
+	case d0_state: return state_names[0];
+	case idle_state: return state_names[1];
+	case d3_state: return state_names[2];
+	default: return state_names[3];
+	}
+}
+
+static ssize_t suspend_stats_read(struct file *file, char __user *buffer,
+				  size_t count, loff_t *ppos)
+{
+	struct sst_hsw_log_stream *log_stream = file->private_data;
+	struct sst_hsw *hsw = log_stream->hsw;
+	char *buf = NULL;
+
+	if (*ppos)
+		return 0;
+
+	buf = kzalloc(PAGE_SIZE, GFP_DMA);
+	if (buf == NULL)
+		return -ENOMEM;
+
+	count = snprintf(buf, PAGE_SIZE, "current state %s (%d)\ncount of :\n"
+			 "Idle %d\nD0 %d\nD3 %d\nS0 %d\nS3 %d\n",
+			 get_dstate_name(hsw->dx_state), hsw->dx_state,
+			 hsw->cnt_state_idle, hsw->cnt_state_d0,
+			 hsw->cnt_state_d3, hsw->cnt_state_s0,
+			 hsw->cnt_state_s3);
+
+	count = simple_read_from_buffer(buffer, count, ppos, buf, count);
+
+	kfree(buf);
+
+	return count;
+}
+
+static const struct file_operations suspend_stats_fops = {
+	.open = suspend_stats_open,
+	.read = suspend_stats_read,
+};
+#endif
+
 int sst_hsw_fw_log_enable(struct sst_hsw *hsw)
 {
 	struct sst_hsw_log_stream *stream = &hsw->log_stream;
 	int i, ret;
-	struct dentry *fwdir = NULL, *fw_log = NULL, *fw_log_config = NULL;
+	struct dentry *fwdir = NULL, *fw_log = NULL, *fw_log_config = NULL,
+		      *suspend_stats = NULL;
 
 	if (WARN_ON(!hsw))
 		return -ENXIO;
@@ -2269,6 +2335,17 @@ int sst_hsw_fw_log_enable(struct sst_hsw *hsw)
 		goto err_file;
 	}
 
+#ifdef CONFIG_PM
+	suspend_stats = debugfs_create_file("suspend_stats", 0444,
+					    hsw->dsp->debugfs_root,
+					    stream, &suspend_stats_fops);
+	if (!suspend_stats) {
+		dev_warn(stream->hsw->dev,
+			 "ASoC: Failed to create suspend_stats file\n");
+		ret = -ENOMEM;
+		goto err_file;
+	}
+#endif
 	return 0;
 
 err_file:
