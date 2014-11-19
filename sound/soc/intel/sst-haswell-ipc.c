@@ -31,6 +31,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/debugfs.h>
 #include <linux/pm_runtime.h>
+#include <sound/memalloc.h>
 
 #include "sst-haswell-ipc.h"
 #include "sst-dsp.h"
@@ -262,6 +263,9 @@ struct sst_hsw_log_stream {
 
 	/* fw log config */
 	u32 config[SST_HSW_FW_LOG_CONFIG_DWORDS];
+
+	/* DMA buffer descriptors */
+	struct snd_dma_buffer *dma_buf[2];
 
 	struct sst_hsw *hsw;
 };
