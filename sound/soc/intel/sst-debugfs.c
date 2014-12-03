@@ -17,6 +17,7 @@
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
 #include <linux/device.h>
+#include <linux/pm_runtime.h>
 
 #include "sst-dsp.h"
 #include "sst-dsp-priv.h"
@@ -60,7 +61,9 @@ static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
 	if (!buf)
 		return -ENOMEM;
 
+	pm_runtime_get(dfse->sst->dev);
 	sst_memcpy_fromio_32(dfse->sst, buf, dfse->buf + pos, size);
+	pm_runtime_put(dfse->sst->dev);
 
 	ret = copy_to_user(buffer, buf, count);
 	kfree(buf);
@@ -106,7 +109,9 @@ static ssize_t sst_dfsentry_write(struct file *file, const char __user *buffer,
 		return -EFAULT;
 	}
 
+	pm_runtime_get(dfse->sst->dev);
 	sst_memcpy_toio_32(dfse->sst, buf, dfse->buf + pos, size);
+	pm_runtime_put(dfse->sst->dev);
 
 	kfree(buf);
 	count -= res;
