@@ -41,30 +41,35 @@ static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
 	struct sst_dfsentry *dfse = file->private_data;
 	int i, size;
 	u32 *buf;
+	loff_t pos = *ppos;
+	size_t ret;
 
 	dev_dbg(dfse->sst->dev, "pbuf: %p, *ppos: 0x%llx\n", buffer, *ppos);
 
 	size = dfse->size;
 
-	if (*ppos >= size)
+	if (pos < 0)
+		return -EINVAL;
+	if (pos >= size || !count)
 		return 0;
-	if (*ppos + count > size)
-		count = size - *ppos;
+	if (count > size - pos)
+		count = size - pos;
 
 	size = (count + 3) & (~3);
 	buf = kzalloc(size, GFP_KERNEL);
-
 	if (!buf)
 		return -ENOMEM;
 
 	for (i = 0; i < size / sizeof(*buf); i++)
 		buf[i] = *(u32 *)(dfse->buf + *ppos + i * sizeof(*buf));
 
-	if (copy_to_user(buffer, buf, count))
-		return 0;
+	ret = copy_to_user(buffer, buf, count);
 	kfree(buf);
 
-	*ppos += count;
+	if (ret == count)
+		return -EFAULT;
+	count -= ret;
+	*ppos = pos + count;
 
 	dev_dbg(dfse->sst->dev, "*ppos: 0x%llx, count: %zu\n", *ppos, count);
 
@@ -77,30 +82,37 @@ static ssize_t sst_dfsentry_write(struct file *file, const char __user *buffer,
 	struct sst_dfsentry *dfse = file->private_data;
 	int i, size;
 	u32 *buf;
+	loff_t pos = *ppos;
+	size_t res;
 
 	dev_dbg(dfse->sst->dev, "pbuf: %p, *ppos: 0x%llx\n", buffer, *ppos);
 
 	size = dfse->size;
 
-	if (*ppos >= size)
+	if (pos < 0)
+		return -EINVAL;
+	if (pos >= size || !count)
 		return 0;
-	if (*ppos + count > size)
-		count = size - *ppos;
+	if (count > size - pos)
+		count = size - pos;
 
 	size = (count + 3) & (~3);
 	buf = kzalloc(size, GFP_KERNEL);
-
 	if (!buf)
 		return -ENOMEM;
 
-	if (copy_from_user(buf, buffer, count))
-		return 0;
+	res = copy_from_user(buf, buffer, count);
+	if (res == count) {
+		kfree(buf);
+		return -EFAULT;
+	}
 
 	for (i = 0; i < size / sizeof(*buf); i++)
 		*(u32 *)(dfse->buf + *ppos + i * sizeof(*buf)) = buf[i];
 
 	kfree(buf);
-	*ppos += count;
+	count -= res;
+	*ppos = pos + count;
 
 	dev_dbg(dfse->sst->dev, "*ppos: 0x%llx, count: %zu\n", *ppos, count);
 
