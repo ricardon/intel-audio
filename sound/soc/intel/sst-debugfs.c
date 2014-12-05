@@ -39,7 +39,7 @@ static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
 				 size_t count, loff_t *ppos)
 {
 	struct sst_dfsentry *dfse = file->private_data;
-	int i, size;
+	int size;
 	u32 *buf;
 	loff_t pos = *ppos;
 	size_t ret;
@@ -60,8 +60,7 @@ static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
 	if (!buf)
 		return -ENOMEM;
 
-	for (i = 0; i < size / sizeof(*buf); i++)
-		buf[i] = *(u32 *)(dfse->buf + *ppos + i * sizeof(*buf));
+	sst_memcpy_fromio_32(dfse->sst, buf, dfse->buf + pos, size);
 
 	ret = copy_to_user(buffer, buf, count);
 	kfree(buf);
@@ -80,7 +79,7 @@ static ssize_t sst_dfsentry_write(struct file *file, const char __user *buffer,
 				  size_t count, loff_t *ppos)
 {
 	struct sst_dfsentry *dfse = file->private_data;
-	int i, size;
+	int size;
 	u32 *buf;
 	loff_t pos = *ppos;
 	size_t res;
@@ -107,8 +106,7 @@ static ssize_t sst_dfsentry_write(struct file *file, const char __user *buffer,
 		return -EFAULT;
 	}
 
-	for (i = 0; i < size / sizeof(*buf); i++)
-		*(u32 *)(dfse->buf + *ppos + i * sizeof(*buf)) = buf[i];
+	sst_memcpy_toio_32(dfse->sst, buf, dfse->buf + pos, size);
 
 	kfree(buf);
 	count -= res;
