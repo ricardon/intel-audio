@@ -496,6 +496,8 @@ static int hsw_acpi_resource_map(struct sst_dsp *sst, struct sst_pdata *pdata)
 		dev_warn(sst->dev, "debugfs file mem not created\n");
 	if (!sst_debugfs_add_mmio_entry(sst, pdata, "cfg"))
 		dev_warn(sst->dev, "debugfs file cfg not created\n");
+	if (!sst_debugfs_add_mmio_entry(sst, pdata, "core_dump"))
+		dev_warn(sst->dev, "debugfs file core_dump not created\n");
 #endif
 
 	return 0;

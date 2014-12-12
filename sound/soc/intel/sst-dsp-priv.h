@@ -266,6 +266,7 @@ struct sst_dsp {
 	struct dentry *debugfs_root;
 	void *debugfs_bar0;	/* DRAM and IRAM */
 	void *debugfs_bar1;	/* configuration space */
+	void *debugfs_core_dump;
 
 	/* base addresses */
 	struct sst_addr addr;
