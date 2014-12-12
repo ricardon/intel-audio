@@ -110,7 +110,7 @@ static ssize_t sst_dfsentry_write(struct file *file, const char __user *buffer,
 	}
 
 	pm_runtime_get(dfse->sst->dev);
-	sst_memcpy_toio_32(dfse->sst, buf, dfse->buf + pos, size);
+	sst_memcpy_toio_32(dfse->sst, dfse->buf + pos, buf, size);
 	pm_runtime_put(dfse->sst->dev);
 
 	kfree(buf);
