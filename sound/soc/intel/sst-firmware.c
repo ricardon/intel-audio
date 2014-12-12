@@ -14,6 +14,7 @@
  *
  */
 
+#define DEBUG
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
@@ -146,14 +147,16 @@ static int block_list_prepare(struct sst_dsp *dsp,
 	struct sst_mem_block *block;
 	int ret = 0;
 
-	/* enable each block so that's it'e ready for data */
+	/* enable each block so that's it's ready for data */
 	list_for_each_entry(block, block_list, module_list) {
 
+		//printk(KERN_ERR "++++block i[%d]o[0x%x]u[%d]t[%d]",
+		//       block->index, block->offset, block->users, block->type);
 		if (block->ops && block->ops->enable && !block->users) {
 			ret = block->ops->enable(block);
 			if (ret < 0) {
 				dev_err(dsp->dev,
-					"error: cant disable block %d:%d\n",
+					"error: cant enable block %d:%d\n",
 					block->type, block->index);
 				goto err;
 			}
@@ -1028,6 +1031,7 @@ struct sst_mem_block *sst_mem_block_register(struct sst_dsp *dsp, u32 offset,
 	block->dsp = dsp;
 	block->private = private;
 	block->ops = ops;
+	//block->users = 1; /* Hack to enable all the blocks */
 
 	mutex_lock(&dsp->mutex);
 	list_add(&block->list, &dsp->free_block_list);

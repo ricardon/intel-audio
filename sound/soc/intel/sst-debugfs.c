@@ -13,6 +13,7 @@
  * GNU General Public License for more details.
  */
 
+#define DEBUG
 #include <linux/slab.h>
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
@@ -40,12 +41,32 @@ static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
 				 size_t count, loff_t *ppos)
 {
 	struct sst_dfsentry *dfse = file->private_data;
+	struct sst_mem_block *block;
 	int size;
 	u32 *buf;
 	loff_t pos = *ppos;
 	size_t ret;
 
 	dev_dbg(dfse->sst->dev, "pbuf: %p, *ppos: 0x%llx\n", buffer, *ppos);
+
+	mutex_lock(&dfse->sst->mutex);
+	/* temporarily enable all free block for read */
+	list_for_each_entry(block, &dfse->sst->free_block_list, list) {
+
+		//printk(KERN_ERR "*+++block i[%d]o[0x%x]u[%d]t[%d]",
+		//       block->index, block->offset, block->users, block->type);
+		//block->users++;
+
+		if (block->ops && block->ops->enable) {
+			ret = block->ops->enable(block);
+			if (ret < 0) {
+				dev_err(dfse->sst->dev,
+					"error: cant enable block %d:%d\n",
+					block->type, block->index);
+			}
+		}
+	}
+	mutex_unlock(&dfse->sst->mutex);
 
 	size = dfse->size;
 
@@ -73,6 +94,27 @@ static ssize_t sst_dfsentry_read(struct file *file, char __user *buffer,
 	count -= ret;
 	*ppos = pos + count;
 
+#if 1
+	mutex_lock(&dfse->sst->mutex);
+	/* disable the free blocks again */
+	list_for_each_entry(block, &dfse->sst->free_block_list, list) {
+
+		//printk(KERN_ERR "*---block i[%d]o[0x%x]u[%d]t[%d]",
+		//       block->index, block->offset, block->users, block->type);
+		//block->users--;
+
+		if (block->ops && block->ops->disable) {
+			ret = block->ops->disable(block);
+			if (ret < 0) {
+				dev_err(dfse->sst->dev,
+					"error: cant disable block %d:%d\n",
+					block->type, block->index);
+			}
+		}
+	}
+	mutex_unlock(&dfse->sst->mutex);
+#endif
+
 	dev_dbg(dfse->sst->dev, "*ppos: 0x%llx, count: %zu\n", *ppos, count);
 
 	return count;
@@ -82,12 +124,33 @@ static ssize_t sst_dfsentry_write(struct file *file, const char __user *buffer,
 				  size_t count, loff_t *ppos)
 {
 	struct sst_dfsentry *dfse = file->private_data;
+	struct sst_mem_block *block;
 	int size;
 	u32 *buf;
 	loff_t pos = *ppos;
 	size_t res;
 
 	dev_dbg(dfse->sst->dev, "pbuf: %p, *ppos: 0x%llx\n", buffer, *ppos);
+	printk(KERN_ERR "pbuf: %p, *ppos: 0x%llx\n", buffer, *ppos);
+
+	mutex_lock(&dfse->sst->mutex);
+	/* temporarily enable all free block for write */
+	list_for_each_entry(block, &dfse->sst->free_block_list, list) {
+
+		//printk(KERN_ERR "*+++block i[%d]o[0x%x]u[%d]t[%d]",
+		//       block->index, block->offset, block->users, block->type);
+		//block->users++;
+
+		if (block->ops && block->ops->enable) {
+			res = block->ops->enable(block);
+			if (res < 0) {
+				dev_err(dfse->sst->dev,
+					"error: cant enable block %d:%d\n",
+					block->type, block->index);
+			}
+		}
+	}
+	mutex_unlock(&dfse->sst->mutex);
 
 	size = dfse->size;
 
@@ -109,13 +172,37 @@ static ssize_t sst_dfsentry_write(struct file *file, const char __user *buffer,
 		return -EFAULT;
 	}
 
+	printk(KERN_ERR "sample[0x%x 0x%x 0x%x]\n", buf[0], buf[1], buf[2]);
+	if (!pos)
+		printk(KERN_ERR "trigg[0x%x]\n", buf[0x7c]);
 	pm_runtime_get(dfse->sst->dev);
-	sst_memcpy_toio_32(dfse->sst, buf, dfse->buf + pos, size);
+	sst_memcpy_toio_32(dfse->sst, dfse->buf + pos, buf, size);
 	pm_runtime_put(dfse->sst->dev);
 
 	kfree(buf);
 	count -= res;
 	*ppos = pos + count;
+
+#if 1
+	mutex_lock(&dfse->sst->mutex);
+	/* disable the free blocks again */
+	list_for_each_entry(block, &dfse->sst->free_block_list, list) {
+
+		//printk(KERN_ERR "*---block i[%d]o[0x%x]u[%d]t[%d]",
+		//       block->index, block->offset, block->users, block->type);
+		//block->users--;
+
+		if (block->ops && block->ops->disable) {
+			res = block->ops->disable(block);
+			if (res < 0) {
+				dev_err(dfse->sst->dev,
+					"error: cant disable block %d:%d\n",
+					block->type, block->index);
+			}
+		}
+	}
+	mutex_unlock(&dfse->sst->mutex);
+#endif
 
 	dev_dbg(dfse->sst->dev, "*ppos: 0x%llx, count: %zu\n", *ppos, count);
 

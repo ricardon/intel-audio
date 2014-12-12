@@ -14,6 +14,7 @@
  *
  */
 
+#define DEBUG
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
@@ -468,6 +469,7 @@ static int hsw_acpi_resource_map(struct sst_dsp *sst, struct sst_pdata *pdata)
 	/* ADSP DRAM & IRAM */
 	sst->addr.lpe_base = pdata->lpe_base;
 	sst->addr.lpe = ioremap(pdata->lpe_base, pdata->lpe_size);
+	printk(KERN_ERR "***** LPE[0x%x] size[0x%x] mapped[0x%x]", pdata->lpe_base, pdata->lpe_size, sst->addr.lpe);
 	if (!sst->addr.lpe)
 		return -ENODEV;
 
@@ -678,11 +680,15 @@ static int hsw_init(struct sst_dsp *sst, struct sst_pdata *pdata)
 
 	/* register DSP memory blocks - ideally we should get this from ACPI */
 	for (i = 0; i < region_count; i++) {
+		printk(KERN_ERR "***register region s[0x%x]e[0x%x],b[%d]t[%d]",
+		       region[i].start, region[i].end, region[i].blocks, region[i].type);
 		offset = region[i].start;
 		size = (region[i].end - region[i].start) / region[i].blocks;
 
 		/* register individual memory blocks */
 		for (j = 0; j < region[i].blocks; j++) {
+			printk(KERN_ERR "***register blockregion o[0x%x]s[0x%x],t[%d]i[%d]",
+			       offset, size, region[i].type, j);
 			sst_mem_block_register(sst, offset, size,
 				region[i].type, &sst_hsw_ops, j, sst);
 			offset += size;

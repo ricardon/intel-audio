@@ -14,6 +14,7 @@
  *
  */
 
+#define DEBUG
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -858,6 +859,7 @@ static int hsw_log_message(struct sst_hsw *hsw, u32 header)
 		return 0;
 	}
 
+	printk(KERN_ERR "****LOG REQUESTED!");
 	mutex_lock(&stream->rw_mutex);
 	stream->last_pos = stream->curr_pos;
 	sst_dsp_inbox_read(
